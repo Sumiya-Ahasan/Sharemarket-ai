@@ -19,7 +19,7 @@ from xgboost import XGBRegressor
 # --- Page Setup
 # =============================
 st.set_page_config(page_title="Smart Share Market Prediction", page_icon="📊", layout="wide")
-st.title("🤖 Smart Share Market Prediction (Fully Auto & Error-Free)")
+st.title("🤖 Hello! Share Market ")
 
 # =============================
 # --- Load Dataset
@@ -27,12 +27,9 @@ st.title("🤖 Smart Share Market Prediction (Fully Auto & Error-Free)")
 DATA_URL = "https://drive.google.com/uc?export=download&id=1006n43OyDiOzLsKH-deZS-HOi4P6KnbS"
 
 try:
-    st.subheader("📥 Loading Dataset...")
     response = requests.get(DATA_URL, allow_redirects=True, timeout=25)
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
-
-    st.success("✅ Dataset Loaded Successfully!")
     st.dataframe(df.head())
 except Exception as e:
     st.error(f"⚠️ Failed to load dataset: {e}")
@@ -106,7 +103,7 @@ pipelines = {
 # =============================
 # --- Train & Evaluate Models
 # =============================
-st.subheader("🧠 Training and Evaluating Models...")
+st.subheader("🧠 Training Evaluating Models...")
 
 performance = {}
 for name, pipeline in pipelines.items():
