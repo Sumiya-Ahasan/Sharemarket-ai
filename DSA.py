@@ -15,11 +15,8 @@ from sklearn.svm import SVR
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 
-# =============================
-# --- Page Setup
-# =============================
 st.set_page_config(page_title="Smart Share Market Prediction", page_icon="📊", layout="wide")
-st.title("🤖 Hello! Share Market ")
+st.title("🤖 Smart Share Market Prediction (Debug Mode)")
 
 # =============================
 # --- Load Dataset
@@ -30,56 +27,53 @@ try:
     response = requests.get(DATA_URL, allow_redirects=True, timeout=25)
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
+    st.success("✅ Dataset loaded successfully!")
     st.dataframe(df.head())
 except Exception as e:
-    st.error(f"⚠️ Failed to load dataset: {e}")
+    st.exception(e)
     st.stop()
 
 # =============================
-# --- Select Target Variable
+# --- Select Target
 # =============================
 all_cols = df.columns.tolist()
 target = st.selectbox("🎯 Select Target Variable", all_cols, index=len(all_cols) - 1)
 
-# --- Drop NaN rows where target missing ---
-df = df.dropna(subset=[target])
-
-# --- Separate Features & Target ---
-X = df.drop(columns=[target])
-y = df[target]
-
-# --- Handle NaN in target (safety) ---
-if y.isna().sum() > 0:
-    y = y.fillna(y.mean())
+try:
+    df = df.dropna(subset=[target])
+    X = df.drop(columns=[target])
+    y = df[target]
+except Exception as e:
+    st.exception(e)
+    st.stop()
 
 # =============================
-# --- Identify Numeric & Categorical Columns
+# --- Preprocessing
 # =============================
-numeric_features = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
-categorical_features = X.select_dtypes(include=["object", "category"]).columns.tolist()
+try:
+    numeric_features = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
+    categorical_features = X.select_dtypes(include=["object", "category"]).columns.tolist()
 
-# =============================
-# --- Preprocessing Pipelines
-# =============================
-numeric_transformer = Pipeline(steps=[
-    ("imputer", SimpleImputer(strategy="mean")),
-    ("scaler", StandardScaler())
-])
+    numeric_transformer = Pipeline([
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler())
+    ])
 
-categorical_transformer = Pipeline(steps=[
-    ("imputer", SimpleImputer(strategy="most_frequent")),
-    ("encoder", OneHotEncoder(handle_unknown="ignore"))
-])
+    categorical_transformer = Pipeline([
+        ("imputer", SimpleImputer(strategy="most_frequent")),
+        ("encoder", OneHotEncoder(handle_unknown="ignore"))
+    ])
 
-preprocessor = ColumnTransformer(
-    transformers=[
+    preprocessor = ColumnTransformer([
         ("num", numeric_transformer, numeric_features),
         ("cat", categorical_transformer, categorical_features)
-    ]
-)
+    ])
+except Exception as e:
+    st.exception(e)
+    st.stop()
 
 # =============================
-# --- Define Model Pipelines
+# --- Models
 # =============================
 pipelines = {
     "Linear Regression": Pipeline([
@@ -101,9 +95,9 @@ pipelines = {
 }
 
 # =============================
-# --- Train & Evaluate Models
+# --- Train & Evaluate
 # =============================
-st.subheader("🧠 Training Evaluating Models...")
+st.subheader("🧠 Training and Evaluating Models...")
 
 performance = {}
 for name, pipeline in pipelines.items():
@@ -115,83 +109,54 @@ for name, pipeline in pipelines.items():
         performance[name] = {"model": pipeline, "r2": r2, "mse": mse}
         st.write(f"✅ {name}: R² = {r2:.4f}, MSE = {mse:.2f}")
     except Exception as e:
-        st.warning(f"⚠️ {name} failed: {e}")
+        st.warning(f"⚠️ {name} failed:")
+        st.exception(e)
 
-# =============================
-# --- Auto-Select Best Model
-# =============================
 if not performance:
-    st.error("❌ No model could be evaluated successfully.")
+    st.error("❌ No model trained successfully.")
     st.stop()
 
 best_model_name = max(performance, key=lambda k: performance[k]["r2"])
 best_model = performance[best_model_name]["model"]
 best_r2 = performance[best_model_name]["r2"]
 
-st.success(f"🏆 Best Model Selected Automatically: **{best_model_name}** (R² = {best_r2:.4f})")
+st.success(f"🏆 Best Model: **{best_model_name}** (R² = {best_r2:.4f})")
 
 # =============================
-# --- Plot Actual vs Predicted
+# --- Prediction Plot
 # =============================
 try:
     y_pred_best = best_model.predict(X)
     fig, ax = plt.subplots()
-    ax.scatter(y, y_pred_best, color='blue', alpha=0.6, label='Predicted')
-    ax.plot(y, y, color='red', label='Actual')
-    ax.set_xlabel("Actual Values")
-    ax.set_ylabel("Predicted Values")
-    ax.set_title(f"Actual vs Predicted ({best_model_name})")
-    ax.legend()
+    ax.scatter(y, y_pred_best, color="blue", alpha=0.6)
+    ax.plot(y, y, color="red")
+    ax.set_xlabel("Actual")
+    ax.set_ylabel("Predicted")
     st.pyplot(fig)
 except Exception as e:
-    st.warning(f"Plotting failed: {e}")
+    st.exception(e)
 
 # =============================
-# --- Manual Input Prediction
-# =============================
-st.markdown("---")
-st.subheader("🧮 Try Your Own Input")
-
-user_input = {}
-cols = st.columns(2)
-for i, col_name in enumerate(X.columns):
-    with cols[i % 2]:
-        sample_val = df[col_name].iloc[0]
-        if isinstance(sample_val, (int, float)):
-            user_input[col_name] = st.number_input(f"{col_name}", value=float(df[col_name].mean()))
-        else:
-            user_input[col_name] = st.text_input(f"{col_name}", value=str(sample_val))
-
-if st.button("🔮 Predict Automatically"):
-    input_df = pd.DataFrame([user_input])
-    prediction = best_model.predict(input_df)[0]
-    st.success(f"📈 Predicted {target}: {prediction:.2f}")
-    st.info(f"🤖 Model Used: **{best_model_name}** (R² = {best_r2:.4f})")
-
-# =============================
-# --- Model Comparison Table
+# --- Manual Input
 # =============================
 st.markdown("---")
-st.subheader("📊 Model Performance Comparison")
+st.subheader("🧮 Manual Prediction")
 
-perf_df = pd.DataFrame({
-    "Model": performance.keys(),
-    "R² Score": [round(v["r2"], 4) for v in performance.values()],
-    "MSE": [round(v["mse"], 2) for v in performance.values()]
-}).sort_values(by="R² Score", ascending=False)
+try:
+    user_input = {}
+    cols = st.columns(2)
+    for i, col_name in enumerate(X.columns):
+        with cols[i % 2]:
+            sample_val = df[col_name].iloc[0]
+            if isinstance(sample_val, (int, float)):
+                user_input[col_name] = st.number_input(f"{col_name}", value=float(df[col_name].mean()))
+            else:
+                user_input[col_name] = st.text_input(f"{col_name}", value=str(sample_val))
 
-st.table(perf_df)
-
-# =============================
-# --- Footer
-# =============================
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align:center;'>
-        <p>Developed with ❤️ by <b>Sumiya Ahasan</b></p>
-        <p style='font-size:13px;'>© 2025 Smart Share Market ML App | Fully Auto Pipeline Version</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+    if st.button("🔮 Predict"):
+        input_df = pd.DataFrame([user_input])
+        pred_value = best_model.predict(input_df)[0]
+        st.success(f"📈 Predicted {target}: {pred_value:.2f}")
+        st.info(f"🤖 Model Used: {best_model_name} (R² = {best_r2:.4f})")
+except Exception as e:
+    st.exception(e)
